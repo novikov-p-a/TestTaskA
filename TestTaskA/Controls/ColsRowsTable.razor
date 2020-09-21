@@ -1,0 +1,39 @@
+﻿@if (Cols == null || Rows == null || !IsReady)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table" style="color: black; font-size: 10px;">
+        <thead>
+            <tr>
+                @foreach (var c in Cols)
+                {
+                    <th>@c</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in Rows)
+            {
+                <tr>
+                    @foreach (var d in r)
+                    {
+                        <td>@d.ToString("0.###")</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter]
+    public List<string> Cols { get; set; }
+
+    [Parameter]
+    public List<List<float>> Rows { get; set; }
+
+    [Parameter]
+    public bool IsReady { get; set; }
+}

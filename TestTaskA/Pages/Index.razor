@@ -1,0 +1,183 @@
+﻿@page "/"
+@inject IDataTableService _dataTableService
+@using Microsoft.Extensions.Configuration;
+@inject IConfiguration Configuration
+
+<h1>Model testing</h1>
+
+<p>Result lines downloaded: @allTestResults.Rows.Count()</p>
+
+<p>Result lines shown: @selTestResults.Rows.Count()</p>
+
+<div class="text-left">
+
+    <button class="btn btn-primary" style="margin: 10px 10px 10px 0px"
+            @onclick="@(async () => await ShowMoreData())" disabled=@showMoreIsDisabled>
+        Show more
+    </button>
+    <button class="btn btn-primary" style="margin: 10px 10px 10px 10px"
+            @onclick="@(async () => await ReloadAsync())" disabled=@reloadIsDisabled>
+        Reload
+    </button>
+
+</div>
+
+<PlotlyChart style="height: 60vh; min-height: 350px" @bind-Config="config" @bind-Layout="layout" @bind-Data="data" @ref="chart" />
+
+<p>In the table:</p>
+
+<ColsRowsTable Cols=@selTestResults.Cols Rows=@selTestResults.Rows IsReady=@selTestResults.IsReady />
+
+@code {
+    PlotlyChart chart;
+
+    private TestResults allTestResults = new TestResults();
+    private TestResults selTestResults = new TestResults();
+
+    private int currentDataLineCount = 0;
+    private int maxCurrentDataLineCount;
+    private int incrementCurrentDataLineCount;
+    private string pthurl;
+    private string pthparname;
+
+    private bool reloadIsDisabled = true;
+    private bool showMoreIsDisabled = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        incrementCurrentDataLineCount = Configuration.GetSection("NIncrTestRows").Get<int>();
+        maxCurrentDataLineCount = Configuration.GetSection("NLoadedTestRows").Get<int>();
+        pthurl = Configuration.GetSection("PthUrl").Get<string>();
+        pthparname = Configuration.GetSection("PthParName").Get<string>();
+
+        DataTable dataTable = await _dataTableService.GetDataTableAsync(pthurl, pthparname, maxCurrentDataLineCount);
+
+        allTestResults.GetFrom(dataTable.content);
+
+        currentDataLineCount = incrementCurrentDataLineCount;
+        selTestResults.GetFrom(allTestResults, currentDataLineCount);
+
+        reloadIsDisabled = false;
+        showMoreIsDisabled = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await DrawScatter();
+        }
+    }
+
+    private async Task ShowMoreData()
+    {
+        reloadIsDisabled = true;
+        showMoreIsDisabled = true;
+
+        if (currentDataLineCount < maxCurrentDataLineCount)
+        {
+            currentDataLineCount = Math.Min(currentDataLineCount + incrementCurrentDataLineCount, maxCurrentDataLineCount);
+            selTestResults.GetFrom(allTestResults, currentDataLineCount);
+
+            await DrawScatter();
+        }
+
+        reloadIsDisabled = false;
+        if (currentDataLineCount < maxCurrentDataLineCount)
+        {
+            showMoreIsDisabled = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        reloadIsDisabled = true;
+        showMoreIsDisabled = true;
+
+        allTestResults.Reset();
+        selTestResults.Reset();
+
+        DataTable dataTable = await _dataTableService.GetDataTableAsync(pthurl, pthparname, maxCurrentDataLineCount);
+
+        allTestResults.GetFrom(dataTable.content);
+        selTestResults.GetFrom(allTestResults, currentDataLineCount = incrementCurrentDataLineCount);
+
+        await DrawScatter();
+
+        reloadIsDisabled = false;
+        showMoreIsDisabled = false;
+    }
+
+    Config config = new Config
+    {
+        Responsive = true
+    };
+
+    Layout layout = new Layout
+    {
+        Title = new Title
+        {
+            Text = "Test results"
+        },
+
+        YAxis = new List<YAxis>
+{
+                new YAxis
+                {
+                    Title = new Plotly.Blazor.LayoutLib.YAxisLib.Title
+                    {
+                        Text = "Predict"
+                    }
+                }
+            },
+
+        XAxis = new List<XAxis>
+{
+                new XAxis
+                {
+                    Title = new Plotly.Blazor.LayoutLib.XAxisLib.Title
+                    {
+                        Text = "Target"
+                    }
+                }
+            }
+    };
+
+    IList<ITrace> data = new List<ITrace>{
+            new Plotly.Blazor.Traces.Scatter
+            {
+                Name = "ScatterTrace",
+                Mode = ModeFlag.Lines | ModeFlag.Markers,
+                X = new List<object>(),
+                Y = new List<object>()
+            }
+        };
+
+    private async Task DrawScatter()
+    {
+        List<object> x = new List<object>();
+        List<object> y = new List<object>();
+
+        if (selTestResults != null)
+        {
+            foreach (var r in selTestResults.Rows)
+            {
+                x.Add(r[Configuration.GetSection("TargetIndex").Get<int>()]);
+                y.Add(r[Configuration.GetSection("PredictIndex").Get<int>()]);
+
+            }
+        }
+
+        await chart.Clear();
+
+        await chart.AddTrace(new Plotly.Blazor.Traces.Scatter
+        {
+            Name = $"Test set",
+            Mode = ModeFlag.Markers,
+            X = (IList<object>)x,
+            Y = (IList<object>)y
+        });
+    }
+}
+
+
